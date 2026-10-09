@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<!--
+  Gabarit du PDF généré par F5. Coller tout le contenu dans l'action Compose "Html".
+  Les expressions @{...} sont évaluées par Power Automate. Les noms internes des colonnes Person
+  (ProjectOwner, BusinessOwner, SignatureAuthority) doivent correspondre à ceux de la liste.
+  La conversion OneDrive accepte un CSS simple : pas de flexbox ni de grid, tableaux uniquement.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>@{triggerOutputs()?['body/RecordID']} v@{triggerOutputs()?['body/RecordVersion']}</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #0D2D5C; margin: 24px; }
+  .band { background: #0D2D5C; color: #FFFFFF; padding: 12px 16px; }
+  .band h1 { font-size: 16pt; margin: 0; }
+  .band p { margin: 4px 0 0 0; font-size: 9pt; }
+  h2 { font-size: 11pt; border-bottom: 2px solid #1ED7E5; padding-bottom: 3px; margin-top: 18px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+  th, td { border: 1px solid #D9E2EC; padding: 5px 6px; text-align: left; vertical-align: top; }
+  th { background: #F3F7FB; width: 32%; font-weight: bold; }
+  .grid th { width: auto; }
+  .num { text-align: right; }
+  .flag { color: #EF234B; font-weight: bold; }
+  .foot { margin-top: 24px; font-size: 8pt; color: #5B6B7F; }
+</style>
+</head>
+<body>
+
+<div class="band">
+  <h1>EFC Procurement Record – @{triggerOutputs()?['body/RecordID']}</h1>
+  <p>Version @{triggerOutputs()?['body/RecordVersion']} · Status: @{triggerOutputs()?['body/Status/Value']} · Generated @{formatDateTime(utcNow(), 'dd.MM.yyyy HH:mm')} UTC · Reason: @{triggerOutputs()?['body/PdfReason']}</p>
+</div>
+
+<h2>1. What</h2>
+<table>
+  <tr><th>Procurement Title</th><td>@{triggerOutputs()?['body/Title']}</td></tr>
+  <tr><th>Department</th><td>@{triggerOutputs()?['body/Department/Value']}</td></tr>
+  <tr><th>Project Owner</th><td>@{triggerOutputs()?['body/ProjectOwner/DisplayName']}</td></tr>
+  <tr><th>Business Owner</th><td>@{triggerOutputs()?['body/BusinessOwner/DisplayName']}</td></tr>
+  <tr><th>Business Need and Scope</th><td>@{triggerOutputs()?['body/BusinessNeed']}</td></tr>
+  <tr><th>Purchase Type</th><td>@{triggerOutputs()?['body/PurchaseType/Value']}</td></tr>
+  <tr><th>Procurement Context</th><td>@{triggerOutputs()?['body/ProcurementContext/Value']}</td></tr>
+  <tr><th>Supplier</th><td>@{triggerOutputs()?['body/SupplierName']}</td></tr>
+  <tr><th>Required Date</th><td>@{if(empty(triggerOutputs()?['body/RequiredDate']), '', formatDateTime(triggerOutputs()?['body/RequiredDate'], 'dd.MM.yyyy'))}</td></tr>
+  <tr><th>Funding Source</th><td>@{triggerOutputs()?['body/FundingSource/Value']}</td></tr>
+  <tr><th>Related Party</th><td>@{if(equals(triggerOutputs()?['body/RelatedPartyFlag'], true), 'Yes', 'No')}</td></tr>
+  <tr><th>Initial Risks</th><td>@{triggerOutputs()?['body/InitialRisks']}</td></tr>
+</table>
+
+<h2>2. How much (EUR, excl. VAT)</h2>
+<table>
+  <tr><th>Main Price</th><td class="num">@{formatNumber(float(coalesce(triggerOutputs()?['body/MainPrice'], 0)), 'N2')}</td></tr>
+  <tr><th>Options</th><td class="num">@{formatNumber(float(coalesce(triggerOutputs()?['body/OptionsValue'], 0)), 'N2')}</td></tr>
+  <tr><th>Renewals</th><td class="num">@{formatNumber(float(coalesce(triggerOutputs()?['body/RenewalsValue'], 0)), 'N2')}</td></tr>
+  <tr><th>Recurring (annual x years)</th><td class="num">@{formatNumber(float(coalesce(triggerOutputs()?['body/RecurringAnnualValue'], 0)), 'N2')} x @{coalesce(triggerOutputs()?['body/RecurringYears'], 0)}</td></tr>
+  <tr><th>Implementation</th><td class="num">@{formatNumber(float(coalesce(triggerOutputs()?['body/ImplementationValue'], 0)), 'N2')}</td></tr>
+  <tr><th>Fees and Expenses</th><td class="num">@{formatNumber(float(coalesce(triggerOutputs()?['body/FeesExpensesValue'], 0)), 'N2')}</td></tr>
+  <tr><th>Related Purchases</th><td class="num">@{formatNumber(float(coalesce(triggerOutputs()?['body/RelatedPurchasesValue'], 0)), 'N2')} @{triggerOutputs()?['body/RelatedPurchasesReference']}</td></tr>
+  <tr><th>Total Expected Commitment</th><td class="num"><b>@{formatNumber(float(coalesce(triggerOutputs()?['body/TotalExpectedCommitment'], 0)), 'N2')}</b></td></tr>
+  <tr><th>Currency Treatment</th><td>@{triggerOutputs()?['body/CurrencyTreatment/Value']}</td></tr>
+  <tr><th>Budget Reference</th><td>@{triggerOutputs()?['body/BudgetReference']}</td></tr>
+  <tr><th>Value Calculation Basis</th><td>@{triggerOutputs()?['body/ValueCalculationBasis']}</td></tr>
+</table>
+
+<h2>3. Route</h2>
+<table>
+  <tr><th>Level</th><td>@{triggerOutputs()?['body/ProcurementLevel']} – @{triggerOutputs()?['body/ProcurementLevelName']}</td></tr>
+  <tr><th>Route</th><td>@{triggerOutputs()?['body/ProcurementRoute']}</td></tr>
+  <tr><th>Competition Requirement</th><td>@{triggerOutputs()?['body/CompetitionRequirement']}</td></tr>
+  <tr><th>Approval Authority</th><td>@{triggerOutputs()?['body/ApprovalAuthority']}</td></tr>
+  <tr><th>Legal Review</th><td>@{if(equals(triggerOutputs()?['body/LegalMandatory'], true), 'Mandatory', 'Not required')}</td></tr>
+  <tr><th>Due Diligence Tier</th><td>@{triggerOutputs()?['body/DueDiligenceTier/Value']}</td></tr>
+</table>
+
+<h2>4. Checks</h2>
+<table>
+  <tr><th>Risk Profile</th><td>@{triggerOutputs()?['body/RiskProfile/Value']}</td></tr>
+  <tr><th>Personal Data / NDA</th><td>@{if(equals(triggerOutputs()?['body/RiskData'], true), 'Yes', 'No')}</td></tr>
+  <tr><th>IT / Cloud / System Access</th><td>@{if(equals(triggerOutputs()?['body/RiskIT'], true), 'Yes', 'No')}</td></tr>
+  <tr><th>IP / Research / Sponsorship</th><td>@{if(equals(triggerOutputs()?['body/RiskIP'], true), 'Yes', 'No')}</td></tr>
+  <tr><th>Open-ended Pricing</th><td>@{if(equals(triggerOutputs()?['body/RiskPricing'], true), 'Yes', 'No')}</td></tr>
+  <tr><th>Liability / Regulatory Risk</th><td>@{if(equals(triggerOutputs()?['body/RiskLiability'], true), 'Yes', 'No')}</td></tr>
+  <tr><th>Non-approved Law / Forum</th><td>@{if(equals(triggerOutputs()?['body/RiskLaw'], true), 'Yes', 'No')}</td></tr>
+  <tr><th>Conflict of Interest</th><td>@{if(equals(triggerOutputs()?['body/RiskConflict'], true), 'Yes', 'No')}</td></tr>
+  <tr><th>Critical Dependency / High-risk Geography</th><td>@{if(equals(triggerOutputs()?['body/RiskCritical'], true), 'Yes', 'No')}</td></tr>
+  <tr><th>Comments</th><td>@{triggerOutputs()?['body/Comments']}</td></tr>
+</table>
+
+<h2>5. Approvals (version @{triggerOutputs()?['body/RecordVersion']})</h2>
+<table class="grid">
+  <tr><th>Type</th><th>Approver</th><th>Decision</th><th>Date (UTC)</th><th>Comments</th><th>Conditions</th></tr>
+  @{outputs('ApprovalRows')}
+</table>
+<table>
+  <tr><th>Signature Authority</th><td>@{triggerOutputs()?['body/SignatureAuthority/DisplayName']}</td></tr>
+  <tr><th>Submitted On</th><td>@{if(empty(triggerOutputs()?['body/SubmittedOn']), '', formatDateTime(triggerOutputs()?['body/SubmittedOn'], 'dd.MM.yyyy HH:mm'))}</td></tr>
+  <tr><th>Approved On</th><td>@{if(empty(triggerOutputs()?['body/ApprovedOn']), '', formatDateTime(triggerOutputs()?['body/ApprovedOn'], 'dd.MM.yyyy HH:mm'))}</td></tr>
+  <tr><th>Contract Signed On</th><td>@{if(empty(triggerOutputs()?['body/ContractSignedOn']), '', formatDateTime(triggerOutputs()?['body/ContractSignedOn'], 'dd.MM.yyyy HH:mm'))}</td></tr>
+  <tr><th>Closed On</th><td>@{if(empty(triggerOutputs()?['body/ClosedOn']), '', formatDateTime(triggerOutputs()?['body/ClosedOn'], 'dd.MM.yyyy HH:mm'))}</td></tr>
+</table>
+
+<p class="foot">
+  This document is a versioned snapshot of the structured record held in SharePoint (Procurement Records), which remains the source of truth.
+  Business approval does not confer signing authority: signature remains subject to Annex 4 – Signature Authority Matrix and the Register of Signatories.
+  Reference: EFC Procurement Policy V3.2 and Annexes 1 to 5.
+</p>
+
+</body>
+</html>
