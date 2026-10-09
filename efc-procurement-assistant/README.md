@@ -1,6 +1,6 @@
 # EFC Procurement Assistant – kit de construction
 
-Ce dossier traduit le cahier des charges « EFC Procurement Assistant, Draft 1.0 » en éléments directement exécutables ou copiables dans Power Platform. Il ne remplace pas la recette Legal/Finance : plusieurs règles du cahier sont renvoyées à « la règle validée », et j'ai dû poser des hypothèses explicites, regroupées à la fin de ce document.
+Ce dossier traduit le cahier des charges « EFC Procurement Assistant, Draft 1.0 » en éléments directement exécutables ou copiables dans Power Platform. Il ne remplace pas la recette Legal/Finance. Les règles de calcul sont reprises du prototype V3.2 FINAL R4. Les écarts entre le prototype et les annexes sont listés à la fin de ce document.
 
 ## Contenu
 
@@ -38,18 +38,40 @@ Dans la bibliothèque, les colonnes s'appellent DocVersion et DocStatus, et non 
 
 Colonnes ajoutées à Procurement Records : RecordVersion, LastStep, AmendmentPending, AmendmentReason, PdfRequested, PdfReason. Le cahier demande de reprendre « la dernière étape enregistrée » et de versionner le dossier, mais le schéma de l'annexe A ne comporte aucune colonne pour cela. Le point 9 autorise les ajouts documentés. Celui-ci est documenté dans le script.
 
-## Hypothèses à faire valider par Legal et Finance
+## Règles reprises du prototype V3.2 FINAL R4
 
-Les règles suivantes sont paramétrables ou isolées dans une seule formule. Elles doivent être confrontées au prototype HTML V3.2 FINAL R4, que je n'ai pas eu entre les mains.
+Les règles de calcul sont reprises à l'identique du prototype. Elles ont été comparées à leur transcription sur 200 000 cas, bornes comprises, sans écart. Ce contrôle porte sur une réécriture JavaScript des formules, et non sur Power Fx exécuté : la recette AT-04 et AT-05 reste nécessaire.
 
-1. Seuils : un montant de 25 000,00 EUR exactement relève du niveau 1, et 25 000,01 EUR du niveau 2. Le cahier écrit « 25,001 », ce qui laisse un vide pour les montants avec centimes. Les bornes sont stockées dans Procurement Config sous la forme « strictement supérieur à » et « inférieur ou égal à ».
-2. Alerte de proximité d'un seuil : elle s'affiche lorsque le total atteint 90 % du plafond du niveau courant (paramètre NearThresholdPercent = 10).
-3. Legal Mandatory vaut Oui si le niveau est supérieur ou égal à 3 (paramètre LegalMandatory.MinLevel) ou si l'un des indicateurs suivants est coché : Related Party, Personal Data/NDA, IP/Research/Sponsorship, Liability/Regulatory, Non-approved Law/Forum, Conflict.
-4. Risk Profile vaut High si Conflict, Related Party ou Critical Dependency est coché, ou si au moins trois risques sont cochés. Il vaut Medium si un ou deux risques sont cochés, et Low sinon.
-5. Due Diligence Tier vaut High si le profil de risque est High ou si le niveau est 4, Medium si le profil est Medium ou si le niveau est 3, et Low sinon.
-6. Séquence d'approbation : Finance, et Legal si Legal Mandatory, en parallèle (séquence 1), puis Business Approver (séquence 2). La signature n'est pas une approbation. Elle est confirmée séparément par la Signature Authority au passage en Contract Signed, conformément au principe de séparation du point 2.
-7. Le Business Approver doit être une personne différente du Project Owner. Le cahier ne le dit pas explicitement, mais c'est la conséquence directe de la séparation des fonctions qu'il pose.
-8. Le Total Expected Commitment doit être strictement positif pour soumettre.
+1. Niveau : aucun niveau si le total est nul. Niveau 1 jusqu'à 25 000 inclus, niveau 2 jusqu'à 50 000 inclus, niveau 3 jusqu'à 250 000 inclus, niveau 4 au-delà. Un montant de 25 000,01 relève donc du niveau 2.
+2. Alerte de seuil : elle s'affiche lorsque le total dépasse 95 % d'un seuil sans l'atteindre (paramètre NearThresholdPercent = 5). Le texte est celui du prototype : la route supérieure doit être envisagée, sauf alternative documentée approuvée par Finance et Legal.
+3. Routes, exigences de concurrence, autorités d'approbation et preuves attendues : textes du prototype, stockés dans Procurement Config.
+4. Legal obligatoire : niveau 3 ou plus, ou related party, ou l'un des risques suivants : données personnelles, IT, IP, prix ouvert, responsabilité, droit ou for non approuvé, conflit.
+5. Risk Profile : High en cas de dépendance critique, de conflit ou de related party. Medium si le niveau est 3 ou plus, ou en cas de données personnelles, d'IT ou d'IP. Low dans les autres cas, et vide tant qu'aucun niveau n'est calculé.
+6. Due Diligence Tier : identique au Risk Profile.
+7. Valeurs de choix (départements, types d'achat, financement, contexte, traitement de la devise) et valeurs par défaut à la création : celles du prototype. Le script signale tout écart avec les colonnes SharePoint existantes.
+8. Résumés de la Policy et des Annexes 1 à 5 : textes du prototype, chargés dans Procurement Policy Links.
+
+## Écarts entre le prototype et les annexes
+
+En lisant le prototype à côté de ses propres résumés d'annexes, j'ai relevé quatre incohérences. Les deux premières sont corrigées dans le kit, mais isolées pour pouvoir être retirées facilement. Les deux autres restent à trancher.
+
+1. L'Annex 3 rend la revue Legal obligatoire, quelle que soit la valeur, pour la « classification employment or individual consultant ». Le prototype ne l'applique pas, alors qu'il propose le type d'achat « Consultant or individual ». Le kit l'applique.
+2. L'Annex 5 impose, pour un profil High, une « enhanced Legal/Compliance review ». Le prototype classe un dossier High dès que la case Critical est cochée, mais sans déclencher Legal. Le kit déclenche Legal dans ce cas. Ces deux ajouts se trouvent dans la seule formule nfLegalAnnexExtension (et dans la condition correspondante du flux F2). Pour revenir strictement au prototype, il suffit de la mettre à false.
+3. L'Annex 5 range « material value » parmi les critères du risque Medium. Le prototype ne relève le profil à Medium qu'à partir du niveau 3. Un achat de 45 000 EUR sans autre risque reste donc Low. Le kit suit le prototype. Legal doit dire si « material value » commence au niveau 2.
+4. L'Annex 5 classe High les cas « public officials », « complex ownership » et « adverse information », pour lesquels le prototype n'a aucune case à cocher. Ils ne peuvent donc pas déclencher le profil High. Si Legal le souhaite, il faut ajouter une case au Step 4 et une colonne.
+
+Deux règles des annexes, absentes du prototype, sont ajoutées parce qu'elles s'automatisent sans interprétation :
+
+1. Annex 3 : jusqu'à 10 000 EUR, un devis accepté suffit comme base contractuelle. Au-delà, un contrat écrit exécuté est exigé avant toute exécution ou tout paiement. La checklist et l'action Contract Signed appliquent cette règle (paramètre ContractRequired.Above).
+2. Annex 2 : interdiction de l'auto-approbation. Le Business Approver doit être différent du Project Owner.
+
+Le kit introduit aussi une règle de sa propre initiative : un dossier dont le traitement de la devise est « Finance confirmation pending » ne peut pas être soumis. Le niveau dépend d'un montant en EUR qui n'est pas encore confirmé, et les approbateurs se prononceraient sur une route peut-être fausse. Cette règle est une ligne de nfMissing et une condition de F2, faciles à retirer.
+
+Restent hors calcul, faute de règle exploitable : l'effet du financement « Grant or donor funding » et « Public or restricted funding » (les conditions d'un bailleur imposent souvent des règles d'achat plus strictes que la Policy), l'« approbation de gouvernance » exigée pour un profil High, et la composition exacte des autorités par niveau, que le prototype décrit par des fonctions (« Relevant Director or approved equivalent ») et non par des groupes.
+
+Les liens vers la Policy et les Annexes sont, dans le prototype, des recherches SharePoint (search.aspx?q=...). Ce ne sont pas des liens directs vers la version publiée, comme l'exige le §7.7. Ils sont repris tels quels dans Procurement Policy Links, et doivent être remplacés dès que les documents approuvés sont publiés. Les sources indiquent d'ailleurs que ces documents sont encore des drafts.
+
+Séquence d'approbation (point non couvert par le prototype, qui se limite à une checklist déclarative) : Finance, et Legal si requis, en parallèle, puis le Business Approver. La signature est confirmée séparément au passage en Contract Signed. Le prototype rappelle d'ailleurs que « award approval remains separate from signature authority ».
 
 ## Décisions ouvertes qui bloquent la mise en production
 

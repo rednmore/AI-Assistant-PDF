@@ -64,53 +64,70 @@ nfLevel =
         (IsBlank(MaxValueIncl) || nfTotal <= MaxValueIncl)
     );
 
+// Prototype : v > 0 && v <= seuil && v > seuil x 0,95, pour les seuils 25 000, 50 000 et 250 000.
 nfNearThreshold =
+    nfTotal > 0 &&
     !IsBlank(nfLevel.MaxValueIncl) &&
-    nfTotal >= nfLevel.MaxValueIncl * (1 - nfNearPct);
+    nfTotal > nfLevel.MaxValueIncl * (1 - nfNearPct);
 
 nfNextLevel = LookUp(nfThresholds, Level = nfLevel.Level + 1);
 
-// ---- Step 4 : risques et déclencheurs (HYPOTHÈSES README §3 à §5) -----------
-
-nfRiskCount =
-    CountRows(
-        Filter(
-            Table(
-                {On: tglRelatedParty.Value},
-                {On: tglRiskData.Value},
-                {On: tglRiskIT.Value},
-                {On: tglRiskIP.Value},
-                {On: tglRiskPricing.Value},
-                {On: tglRiskLiability.Value},
-                {On: tglRiskLaw.Value},
-                {On: tglRiskConflict.Value},
-                {On: tglRiskCritical.Value}
-            ),
-            On
-        )
-    );
+// ---- Step 4 : risques et déclencheurs -------------------------------------
+// Règles reprises du prototype V3.2 FINAL R4 (hasLegalTrigger, riskProfile, autoDD).
 
 nfRiskProfile =
     If(
-        tglRiskConflict.Value || tglRelatedParty.Value || tglRiskCritical.Value || nfRiskCount >= 3, "High",
-        nfRiskCount >= 1, "Medium",
+        tglRiskCritical.Value || tglRiskConflict.Value || tglRelatedParty.Value, "High",
+        Coalesce(nfLevel.Level, 0) >= 3 || tglRiskData.Value || tglRiskIT.Value || tglRiskIP.Value, "Medium",
+        IsBlank(nfLevel), "",
         "Low"
     );
 
-nfLegalMandatory =
-    Coalesce(nfLevel.Level, 1) >= nfLegalMinLevel ||
+// Prototype : le Due Diligence Tier est égal au Risk Profile.
+nfDueDiligenceTier = nfRiskProfile;
+
+// Prototype : niveau >= 3 ou l'un des déclencheurs Annex 3 cochés, ou related party.
+nfLegalPrototype =
+    Coalesce(nfLevel.Level, 0) >= nfLegalMinLevel ||
     tglRelatedParty.Value ||
     tglRiskData.Value ||
+    tglRiskIT.Value ||
     tglRiskIP.Value ||
+    tglRiskPricing.Value ||
     tglRiskLiability.Value ||
     tglRiskLaw.Value ||
     tglRiskConflict.Value;
 
-nfDueDiligenceTier =
-    If(
-        nfRiskProfile = "High" || nfLevel.Level = 4, "High",
-        nfRiskProfile = "Medium" || nfLevel.Level = 3, "Medium",
-        "Low"
+// EXTENSION non présente dans le prototype, tirée des annexes (à confirmer par Legal) :
+// - Annex 3 : « employment or individual-consultant classification » déclenche Legal quelle que soit la valeur ;
+// - Annex 5 : un profil High impose une « enhanced Legal/Compliance review » ; seul RiskCritical
+//   produit High sans être déjà un déclencheur Legal.
+// Pour revenir strictement au prototype : nfLegalAnnexExtension = false;
+nfLegalAnnexExtension =
+    cmbPurchaseType.Selected.Value = "Consultant or individual" ||
+    tglRiskCritical.Value;
+
+nfLegalMandatory = nfLegalPrototype || nfLegalAnnexExtension;
+
+nfLegalReasons =
+    Concat(
+        Filter(
+            Table(
+                {On: Coalesce(nfLevel.Level, 0) >= nfLegalMinLevel, Txt: "niveau " & nfLevel.Level},
+                {On: tglRelatedParty.Value, Txt: "related party"},
+                {On: tglRiskData.Value, Txt: "données personnelles / NDA"},
+                {On: tglRiskIT.Value, Txt: "IT / cloud"},
+                {On: tglRiskIP.Value, Txt: "IP / sponsorship"},
+                {On: tglRiskPricing.Value, Txt: "prix ouvert"},
+                {On: tglRiskLiability.Value, Txt: "responsabilité / réglementaire"},
+                {On: tglRiskLaw.Value, Txt: "droit ou for non approuvé"},
+                {On: tglRiskConflict.Value, Txt: "conflit"},
+                {On: cmbPurchaseType.Selected.Value = "Consultant or individual", Txt: "consultant individuel (Annex 3)"},
+                {On: tglRiskCritical.Value, Txt: "dépendance critique (Annex 5)"}
+            ),
+            On
+        ),
+        Txt, ", "
     );
 
 // ---- Step 6 : champs manquants et conditions non satisfaites (§7.6) ---------
@@ -130,6 +147,11 @@ nfMissing =
             {Step: 2, Item: "Aucune valeur négative", IsMissing: nfHasNegative},
             {Step: 2, Item: "Recurring Years en années entières", IsMissing: nfYearsNotInteger},
             {Step: 2, Item: "Total Expected Commitment supérieur à zéro", IsMissing: nfTotal <= 0},
+            {
+                Step: 2,
+                Item: "Équivalent EUR confirmé par Finance (les seuils en dépendent)",
+                IsMissing: cmbCurrencyTreatment.Selected.Value = "Finance confirmation pending"
+            },
             {Step: 3, Item: "Route calculée (paramètres Procurement Config)", IsMissing: IsBlank(nfLevel)},
             {Step: 5, Item: "Finance Reviewer", IsMissing: IsBlank(cmbFinanceReviewer.Selected)},
             {Step: 5, Item: "Legal Reviewer (revue Legal obligatoire)", IsMissing: nfLegalMandatory && IsBlank(cmbLegalReviewer.Selected)},

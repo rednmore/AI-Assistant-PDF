@@ -187,31 +187,33 @@ Ensure-Field -List "Procurement Config" -Name "CompetitionRequirement" -Type Not
 Ensure-Field -List "Procurement Config" -Name "ApprovalAuthority" -Type Text
 Ensure-Field -List "Procurement Config" -Name "RequiredRouteEvidence" -Type Note
 
-# Seuils du cahier §8.2. ApprovalAuthority reste à compléter selon l'Annex 2 (Delegation of Authority) :
-# une fonction ou un organe, jamais le nom d'une personne (§8.2).
+# Seuils, routes, autorités et preuves : repris à l'identique du prototype V3.2 FINAL R4 (fonctions recalc,
+# routes, approvers, competition, notes, actions). ApprovalAuthority désigne une fonction ou un organe,
+# jamais une personne (§8.2). Level 1 commence strictement au-dessus de 0 : un total nul ne produit
+# aucun niveau, comme dans le prototype.
 Ensure-Item -List "Procurement Config" -Title "Level 1" -Values @{
-    Level = 1; LevelName = "Standard"; MaxValueIncl = 25000; Route = "Direct appointment"
-    CompetitionRequirement = "Preuve proportionnée du caractère raisonnable du prix."
-    ApprovalAuthority = "A CONFIRMER - Annex 2 DoA"
-    RequiredRouteEvidence = "Justification du prix (devis, comparaison, historique)."
+    Level = 1; LevelName = "Standard"; MinValueExcl = 0; MaxValueIncl = 25000; Route = "Direct appointment"
+    CompetitionRequirement = "Price-reasonableness evidence. Document the need, price reasonableness, approval and contractual basis."
+    ApprovalAuthority = "Relevant budget owner with delegated authority"
+    RequiredRouteEvidence = "Define the need and total value; Keep price-reasonableness evidence; Record approval and contractual basis"
 }
 Ensure-Item -List "Procurement Config" -Title "Level 2" -Values @{
     Level = 2; LevelName = "Controlled"; MinValueExcl = 25000; MaxValueIncl = 50000; Route = "Market assessment"
-    CompetitionRequirement = "Au moins deux fournisseurs identifiés et éléments de prix indicatifs."
-    ApprovalAuthority = "A CONFIRMER - Annex 2 DoA"
-    RequiredRouteEvidence = "Note de market assessment avec au moins deux fournisseurs et prix indicatifs."
+    CompetitionRequirement = "At least two identified suppliers and indicative prices. Record the market assessment and recommendation."
+    ApprovalAuthority = "Relevant Director or approved equivalent"
+    RequiredRouteEvidence = "Identify at least two suppliers; Record indicative pricing; Document the recommendation"
 }
 Ensure-Item -List "Procurement Config" -Title "Level 3" -Values @{
-    Level = 3; LevelName = "Enhanced"; MinValueExcl = 50000; MaxValueIncl = 250000; Route = "Competitive RFP"
-    CompetitionRequirement = "Normalement au moins trois offres écrites et évaluation documentée."
-    ApprovalAuthority = "A CONFIRMER - Annex 2 DoA"
-    RequiredRouteEvidence = "Dossier RFP, trois offres écrites, grille d'évaluation signée."
+    Level = 3; LevelName = "Enhanced"; MinValueExcl = 50000; MaxValueIncl = 250000; Route = "Competitive request for proposals"
+    CompetitionRequirement = "Normally at least three written offers and evaluation. Use a written specification and criteria fixed in advance."
+    ApprovalAuthority = "Relevant senior approver under the EFC DoA"
+    RequiredRouteEvidence = "Issue a written RFP; Seek normally at least three written offers; Retain the evaluation and award recommendation"
 }
 Ensure-Item -List "Procurement Config" -Title "Level 4" -Values @{
-    Level = 4; LevelName = "Strategic"; MinValueExcl = 250000; Route = "RFI (si utile) puis competitive RFP"
-    CompetitionRequirement = "Market discovery, compétition formelle et évaluation complète."
-    ApprovalAuthority = "A CONFIRMER - Annex 2 DoA"
-    RequiredRouteEvidence = "RFI éventuelle, dossier RFP, offres, évaluation complète, recommandation d'attribution."
+    Level = 4; LevelName = "Strategic"; MinValueExcl = 250000; Route = "Market information request followed by competitive RFP"
+    CompetitionRequirement = "Market discovery where useful, normally at least three offers and full evaluation. Complete market discovery, formal competition and full evaluation."
+    ApprovalAuthority = "Competent executive or governance body under the EFC DoA"
+    RequiredRouteEvidence = "Run market discovery or an RFI where useful; Issue a competitive RFP; Retain the full evaluation and governance approval"
 }
 
 Ensure-List -Title "Procurement Settings" | Out-Null
@@ -219,8 +221,9 @@ Ensure-Field -List "Procurement Settings" -Name "SettingValue" -Type Text
 Ensure-Field -List "Procurement Settings" -Name "SettingDescription" -Type Note
 
 $settings = [ordered]@{
-    "NearThresholdPercent"     = @("10", "Alerte si le total atteint (100 - X) % du plafond du niveau courant.")
-    "LegalMandatory.MinLevel"  = @("3", "Niveau à partir duquel la revue Legal est obligatoire. HYPOTHESE à valider.")
+    "NearThresholdPercent"     = @("5", "Alerte si le total dépasse (100 - X) % d'un seuil sans l'atteindre. Prototype V3.2 : 5 %.")
+    "LegalMandatory.MinLevel"  = @("3", "Niveau à partir duquel la revue Legal est obligatoire. Prototype V3.2 : 3.")
+    "ContractRequired.Above"   = @("10000", "Annex 3 : au-delà de ce montant, contrat écrit exécuté exigé ; en dessous, devis accepté suffisant.")
     "GroupId.Users"            = @("", "Object ID Entra de EFC-Procurement-Users")
     "GroupId.Legal"            = @("", "Object ID Entra de EFC-Procurement-Legal")
     "GroupId.Finance"          = @("", "Object ID Entra de EFC-Procurement-Finance")
@@ -241,15 +244,50 @@ Ensure-Field -List "Procurement Policy Links" -Name "DocumentUrl" -Type URL
 Ensure-Field -List "Procurement Policy Links" -Name "SortOrder" -Type Number
 Ensure-Field -List "Procurement Policy Links" -Name "IsActive" -Type Boolean
 
+# Résumés et liens repris du prototype. ATTENTION : les liens du prototype sont des recherches SharePoint
+# (_layouts/15/search.aspx?q=...), pas des liens directs. Le cahier (§7.7) exige un lien vers la version
+# publiée : remplacer chaque DocumentUrl par le lien direct dès que les documents sont publiés.
+$search = "https://ecaeurope.sharepoint.com/_layouts/15/search.aspx?q="
 $policies = @(
-    "Procurement Policy V3.2", "Annex 1 - Procedure V3.2", "Annex 2 - Delegation of Authority V3.2",
-    "Annex 3 - Contracting Guidelines V3.2", "Annex 4 - Signature Authority Matrix V3.2",
-    "Annex 5 - Supplier Due Diligence Procedure V3.2"
+    @{ T = "Procurement Policy V3.2"; F = "EFC_Procurement_Policy_V3.2.docx"
+       S = "Mandatory governance policy for procurement by EFC. Use it before EFC signs, orders, instructs work or approves payment. Core rules: calculate the full expected commitment (fees, expenses, options, renewals, extensions, related purchases); do not split requirements; use proportionate competition and documented criteria; complete risk-based due diligence before award; declare conflicts, related parties, gifts and hospitality; obtain approvals before commitment (budget availability is not approval); use a valid contractual basis and an authorised signatory; keep an auditable file. Mandatory law, the EFC Statutes and governing-body resolutions prevail; the Policy prevails over its Annexes." },
+    @{ T = "Annex 1 - Procedure V3.2"; F = "EFC_Procurement_Annex_1_Procedure_V3.2.docx"
+       S = "Operational sourcing and award workflow. Up to EUR 25,000: direct appointment. EUR 25,001-50,000: market assessment, at least two suppliers and indicative prices. EUR 50,001-250,000: competitive RFP, normally three written offers and evaluation. Above EUR 250,000: RFI where useful, then competitive RFP and full evaluation. Key rule: no signature, order, start of work or payment approval until the correct route and controls have been checked." },
+    @{ T = "Annex 2 - Delegation of Authority V3.2"; F = "EFC_Procurement_Annex_2_Delegation_of_Authority_V3.2.docx"
+       S = "Approval before commitment. No self-approval and no approval outside delegated limits. The highest applicable approval prevails. Budget approval does not approve the procurement. Related-party cases require recusal and independent approval. Escalate reserved matters, exceptions, conflicts, unclear authority, unbudgeted commitments and material risk. Procurement approval does not grant signature authority." },
+    @{ T = "Annex 3 - Contracting Guidelines V3.2"; F = "EFC_Procurement_Annex_3_Contracting_Guidelines_V3.2.docx"
+       S = "Up to EUR 10,000: signed or formally accepted quotation and expressly accepted terms, unless risk requires a contract. Above EUR 10,000: executed written contract before commencement or payment. Mandatory Legal involvement regardless of value: NDAs, personal data, privacy, security, IT, software, cloud; open-ended or uncapped pricing; employment or individual-consultant classification; IP, publications, research, collaboration or sponsorship; material liability, indemnity, sanctions, regulatory or reputational risk; non-approved governing law, forum or arbitration." },
+    @{ T = "Annex 4 - Signature Authority Matrix V3.2"; F = "EFC_Procurement_Annex_4_Signature_Authority_Matrix_V3.2.docx"
+       S = "Authority arises only from the applicable register authority or a valid power of attorney. Verify entity, value, subject, duration, territory and joint-signature limits. Complete Legal and business approvals before signature. Use only the Legal-approved execution copy. Do not infer authority from title, seniority, budget or past practice. Do not sign blank, incomplete or backdated documents. Report any unauthorised commitment to Legal immediately." },
+    @{ T = "Annex 5 - Supplier Due Diligence Procedure V3.2"; F = "EFC_Procurement_Annex_5_Supplier_Due_Diligence_V3.2.docx"
+       S = "Low: standard supply, no sensitive access, high-risk geography or dependency; identity, bank, conflict, sanctions and basic commercial checks. Medium: material value, data or premises access, subcontracting, event dependency or ESG exposure; add ownership, financial, privacy/security, insurance, references and sustainability checks. High: strategic dependency, public officials, sensitive data, critical systems, adverse information, complex ownership or marginal result; enhanced Legal/Compliance review and governance approval. Outcomes: Pass, Pass with conditions, Marginal (no award until enhanced review), Fail." }
 )
 $order = 1
 foreach ($p in $policies) {
-    Ensure-Item -List "Procurement Policy Links" -Title $p -Values @{ SortOrder = $order; IsActive = $true; Summary = "A RÉDIGER : résumé opérationnel validé par Legal." }
+    Ensure-Item -List "Procurement Policy Links" -Title $p.T -Values @{
+        SortOrder = $order; IsActive = $true; Summary = $p.S
+        DocumentUrl = "$search$($p.F), $($p.F)"
+    }
     $order++
+}
+
+# Valeurs de choix attendues par l'application et les flux (prototype V3.2). Rapport uniquement :
+# une valeur différente dans SharePoint ne casse pas l'application, mais elle doit être reportée ici.
+$expectedChoices = @{
+    "Department"         = @("Corporate Services", "Finance", "Legal", "Communications", "Football Affairs", "Commercial", "Events", "IT", "HR", "Other")
+    "PurchaseType"       = @("Goods", "Services", "IT, software or cloud", "Works", "Events, venue or travel", "Consultant or individual")
+    "FundingSource"      = @("EFC budget", "Grant or donor funding", "Public or restricted funding")
+    "ProcurementContext" = @("New procurement", "Existing supplier", "Renewal or extension", "Additional scope or change", "Related purchase")
+    "CurrencyTreatment"  = @("EUR — no conversion required", "Finance-confirmed EUR equivalent", "Finance confirmation pending")
+    "RiskProfile"        = @("Low", "Medium", "High")
+    "DueDiligenceTier"   = @("Low", "Medium", "High")
+}
+foreach ($col in $expectedChoices.Keys) {
+    $f = Get-PnPField -List $RecordsListTitle | Where-Object { $_.InternalName -eq $col -or $_.Title -eq $col } | Select-Object -First 1
+    if (-not $f) { continue }
+    $f = Get-PnPField -List $RecordsListTitle -Identity $f.InternalName
+    $missingChoices = $expectedChoices[$col] | Where-Object { $f.Choices -notcontains $_ }
+    if ($missingChoices) { Write-Warning "$col : valeurs absentes de la colonne Choice : $($missingChoices -join ' | ')" }
 }
 
 # ---------------------------------------------------------------------------

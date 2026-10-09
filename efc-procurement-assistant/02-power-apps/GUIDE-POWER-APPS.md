@@ -102,6 +102,9 @@ IfError(
                     JobTitle: "",
                     Picture: ""
                 },
+                FundingSource: {Value: "EFC budget"},
+                ProcurementContext: {Value: "New procurement"},
+                CurrencyTreatment: {Value: "EUR — no conversion required"},
                 RecordVersion: 1,
                 LastStep: 1
             }
@@ -307,6 +310,10 @@ InitialRisks       -> txtInitialRisks
 
 Dans chaque carte, mettre la propriété Required de la carte à false : l'obligation est contrôlée au moment de la soumission, pas de l'enregistrement d'un brouillon. Pour marquer visuellement les champs obligatoires, ajouter " *" au libellé de la carte (Title, Department, BusinessNeed, PurchaseType, Project Owner, Business Owner, FundingSource, ProcurementContext).
 
+Valeurs de choix : les colonnes Choice de SharePoint doivent contenir exactement les valeurs du prototype, que le script contrôle. Department : Corporate Services, Finance, Legal, Communications, Football Affairs, Commercial, Events, IT, HR, Other. PurchaseType : Goods, Services, IT, software or cloud, Works, Events, venue or travel, Consultant or individual. FundingSource : EFC budget, Grant or donor funding, Public or restricted funding. ProcurementContext : New procurement, Existing supplier, Renewal or extension, Additional scope or change, Related purchase. Les formules comparent ces libellés au caractère près, par exemple "Consultant or individual" pour le déclencheur Legal.
+
+Libellés à reprendre du prototype : « Business Owner / Project Leader * » pour Business Owner, « Required delivery / start date » pour RequiredDate, « Proposed supplier, if known » pour SupplierName et « Assumptions, dependencies or initial risks » pour InitialRisks. Pour RelatedPartyFlag : « The supplier may be connected to an EFC governing-body member, employee, member organisation or related person ».
+
 Le Project Owner est prérempli à la création (btnNew). Il reste modifiable tant que le dossier est en Draft, ce qui correspond au « contrôle » demandé au §7.1.
 
 ### 5.4 Step 2 – How much (conStep2)
@@ -330,7 +337,7 @@ BudgetReference           -> txtBudgetReference
 ValueCalculationBasis     -> txtValueCalculationBasis
 ```
 
-Pour toutes les zones de montant, et pour txtRecurringYears, Format TextFormat.Number. Pour RenewalsValue et RecurringAnnualValue, ajouter un texte d'aide sous la carte : les renouvellements valorisés globalement vont dans Renewals, les coûts annuels dans Recurring Annual Value. Saisir les deux pour le même coût le compterait deux fois.
+Pour toutes les zones de montant, et pour txtRecurringYears, Format TextFormat.Number. Le prototype n'additionne une composante que si sa case est cochée. Ici, il n'y a pas de case : une composante vide ou à zéro n'est simplement pas prise en compte, et le résultat est identique. Le prototype limite Recurring Years à 1 à 5 ans. Si cette limite est voulue, remplacer txtRecurringYears par une liste déroulante avec les Items [1, 2, 3, 4, 5], et adapter nfTotal pour lire Value(cmbRecurringYears.Selected.Value). Pour RenewalsValue et RecurringAnnualValue, ajouter un texte d'aide sous la carte : les renouvellements valorisés globalement vont dans Renewals, les coûts annuels dans Recurring Annual Value. Saisir les deux pour le même coût le compterait deux fois.
 
 À droite du formulaire, ajouter une carte de synthèse :
 
@@ -340,9 +347,8 @@ Pour toutes les zones de montant, et pour txtRecurringYears, Format TextFormat.N
 4. Libellé lblNearThreshold : Visible nfNearThreshold, Color nfMagenta. Text :
 
 ```
-"Attention : le total est à moins de " & Text(nfNearPct * 100) & " % du seuil de " &
-Text(nfLevel.MaxValueIncl, "€ #,##0") & ". Au-delà, la route devient « " & nfNextLevel.Route &
-" ». Vérifiez que toutes les composantes (options, renouvellements, achats liés) sont incluses."
+"The value is within " & Text(nfNearPct * 100) & "% of a threshold (EUR " & Text(nfLevel.MaxValueIncl, "#,##0") &
+"). The higher route (" & nfNextLevel.Route & ") should be considered unless Finance and Legal approve a documented alternative."
 ```
 
 5. Libellé lblAmountErrors : Visible `nfHasNegative || nfYearsNotInteger`, Color nfMagenta. Text :
@@ -369,15 +375,23 @@ Level                 : nfLevel.Level & " – " & nfLevel.LevelName
 Route                 : nfLevel.Route
 Approval Authority    : nfLevel.ApprovalAuthority
 Competition           : nfLevel.CompetitionRequirement
-Legal                 : If(nfLegalMandatory, "Revue Legal obligatoire", "Revue Legal non requise")
+Legal                 : If(nfLegalMandatory, "Mandatory", "Required only if a Legal trigger applies")
 Due Diligence         : nfDueDiligenceTier
 ```
 
-La tuile Legal prend un Fill nfMagenta quand nfLegalMandatory est vrai, et la tuile Due Diligence un Fill nfPurple lorsque le niveau vaut High.
+La tuile Legal prend un Fill nfMagenta quand nfLegalMandatory est vrai, et la tuile Due Diligence un Fill nfPurple lorsque nfDueDiligenceTier vaut High. Sous la valeur de la tuile Legal, un libellé affiche `If(nfLegalMandatory, "Motif : " & nfLegalReasons, "Value and Step 4 risk triggers apply.")`. Sous la tuile Approval Authority, reprendre le texte du prototype : "Award approval remains separate from signature authority."
 
-Sous les tuiles, un libellé lblRouteEvidence affiche `"Preuves attendues : " & nfLevel.RequiredRouteEvidence`.
+Sous les tuiles, un libellé lblRouteEvidence affiche `"Required route evidence : " & Substitute(nfLevel.RequiredRouteEvidence, "; ", Char(10) & "• ")`, précédé d'une puce "• ". Les preuves sont stockées dans Procurement Config, séparées par « ; ».
 
-Un libellé lblRouteBasis affiche `"Calcul fondé sur un total de " & Text(nfTotal, "€ #,##0.00") & " et sur " & nfRiskCount & " indicateur(s) de risque."`.
+Un libellé lblRouteBasis reprend la phrase du prototype :
+
+```
+If(
+    IsBlank(nfLevel),
+    "Complete the value calculation to generate the applicable route.",
+    "EUR " & Text(nfTotal, "#,##0") & " produces Level " & nfLevel.Level & " under the V3.2 thresholds."
+)
+```
 
 Ces valeurs reflètent la saisie en cours. Elles ne sont écrites dans SharePoint qu'à l'enregistrement, et le flux de soumission les recalcule.
 
@@ -399,7 +413,7 @@ Comments      -> txtComments
 
 Sous chaque bascule, placer un court texte d'aide tiré de l'Annex 5, dans un libellé de couleur nfMuted.
 
-À droite, une carte de résultat avec lblRiskProfile (`"Risk Profile : " & nfRiskProfile`), lblLegalTrigger (`If(nfLegalMandatory, "Revue Legal obligatoire", "Pas de déclencheur Legal")`) et lblDDTier (`"Due Diligence Tier : " & nfDueDiligenceTier`).
+À droite, une carte de résultat avec lblRiskProfile (`"Risk Profile : " & nfRiskProfile`), lblLegalTrigger (`If(nfLegalMandatory, "Revue Legal obligatoire : " & nfLegalReasons, "Pas de déclencheur Legal")`) et lblDDTier (`"Due Diligence Tier : " & nfDueDiligenceTier`).
 
 Bascule Related Party : elle est saisie à l'étape 1 (RelatedPartyFlag). Rappeler sa valeur ici en lecture seule pour éviter les incohérences avec Conflict : libellé `"Related party déclarée à l'étape 1 : " & If(tglRelatedParty.Value, "Oui", "Non")`.
 
@@ -522,8 +536,17 @@ With(
         },
         {
             Item: "Contractual basis",
-            Ok: CountRows(Filter(docs, DocumentType.Value in ["Contract", "Purchase order"])) > 0,
-            Hint: "Contrat ou bon de commande déposé avant Contract Signed."
+            // Annex 3 : jusqu'à 10 000 EUR, devis accepté suffisant ; au-delà, contrat écrit exécuté.
+            Ok: If(
+                varRec.TotalExpectedCommitment <= Value(LookUp('Procurement Settings', Title = "ContractRequired.Above", SettingValue)),
+                CountRows(Filter(docs, DocumentType.Value in ["Contract", "Quote or offer", "Purchase order"])) > 0,
+                CountRows(Filter(docs, DocumentType.Value = "Contract")) > 0
+            ),
+            Hint: If(
+                varRec.TotalExpectedCommitment <= Value(LookUp('Procurement Settings', Title = "ContractRequired.Above", SettingValue)),
+                "Annex 3 : devis signé ou formellement accepté, avec conditions expressément acceptées.",
+                "Annex 3 : contrat écrit exécuté avant tout début d'exécution ou paiement."
+            )
         }
     )
 )
@@ -698,8 +721,8 @@ If(
                     CompetitionRequirement: nfLevel.CompetitionRequirement,
                     ApprovalAuthority: nfLevel.ApprovalAuthority,
                     LegalMandatory: nfLegalMandatory,
-                    RiskProfile: {Value: nfRiskProfile},
-                    DueDiligenceTier: {Value: nfDueDiligenceTier},
+                    RiskProfile: If(nfRiskProfile = "", Blank(), {Value: nfRiskProfile}),
+                    DueDiligenceTier: If(nfDueDiligenceTier = "", Blank(), {Value: nfDueDiligenceTier}),
                     LastStep: Max(Coalesce(varRec.LastStep, 1), varStep)
                 }
             )
@@ -725,7 +748,7 @@ Le Patch combine les quatre formulaires et les valeurs calculées. Les valeurs c
 
 ## 6. Points de vigilance
 
-Si les formules nommées refusent de référencer des contrôles (cela dépend de la version de Power Apps), déplacer nfTotal, nfLevel, nfRiskCount, nfRiskProfile, nfLegalMandatory, nfDueDiligenceTier et nfMissing dans un conteneur masqué de scrRecord. Chacune devient un libellé, et les autres formules lisent leur valeur, par exemple Value(lblTotalHidden.Text). La logique reste identique.
+Si les formules nommées refusent de référencer des contrôles (cela dépend de la version de Power Apps), déplacer nfTotal, nfLevel, nfRiskProfile, nfLegalMandatory, nfDueDiligenceTier et nfMissing dans un conteneur masqué de scrRecord. Chacune devient un libellé, et les autres formules lisent leur valeur, par exemple Value(lblTotalHidden.Text). La logique reste identique.
 
 Deux utilisateurs qui modifient le même brouillon en même temps : le dernier qui enregistre l'emporte, car SharePoint n'offre pas de contrôle de concurrence par Patch. Si c'est un risque réel, ajouter dans btnSave une vérification `LookUp('Procurement Records', ID = varRec.ID).Modified > varRec.Modified` avant le Patch, et demander à l'utilisateur de recharger le dossier.
 

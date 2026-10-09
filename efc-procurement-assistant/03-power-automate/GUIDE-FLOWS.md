@@ -109,8 +109,8 @@ Déclencheur : Power Apps (V2), avec trois entrées : RecordItemId (Nombre), Act
 
     ContractSigned
     - Condition : `and(equals(outputs('Status'), 'Approved'), or(outputs('IsSignatory'), outputs('IsAdmin')))`
-    - Si vrai : SharePoint « Obtenir les fichiers (propriétés uniquement) » sur Procurement Documents, avec la requête de filtre `RecordID eq '@{body('Get_record')?['RecordID']}' and (DocumentType eq 'Contract' or DocumentType eq 'Purchase order')`.
-    - Si aucun fichier n'est trouvé : Message = « Déposez le contrat ou le bon de commande avant de confirmer la signature. »
+    - Si vrai : SharePoint « Obtenir les fichiers (propriétés uniquement) » sur Procurement Documents. La requête de filtre applique l'Annex 3 : jusqu'à 10 000 EUR (paramètre ContractRequired.Above), `RecordID eq '@{body('Get_record')?['RecordID']}' and (DocumentType eq 'Contract' or DocumentType eq 'Quote or offer' or DocumentType eq 'Purchase order')`. Au-delà, `RecordID eq '@{body('Get_record')?['RecordID']}' and DocumentType eq 'Contract'`. Choisir le filtre avec une Condition sur `lessOrEquals(float(body('Get_record')?['TotalExpectedCommitment']), float(outputs('Setting_ContractAbove')))`.
+    - Si aucun fichier n'est trouvé : Message = « Annex 3 : déposez le contrat exécuté (ou, jusqu'à 10 000 EUR, le devis accepté) avant de confirmer la signature. »
     - Sinon : mettre à jour Status = Contract Signed, et créer dans History un élément ContractSigned avec PerformedBy = UserEmail. Result = ok.
 
     Close
@@ -176,21 +176,29 @@ add(add(add(add(add(add(
 
 ```
 or(
-  greaterOrEquals(outputs('ServerLevel'), int(outputs('Setting_LegalMinLevel'))),
+  greaterOrEquals(coalesce(outputs('ServerLevel'), 0), int(outputs('Setting_LegalMinLevel'))),
   equals(triggerOutputs()?['body/RelatedPartyFlag'], true),
   equals(triggerOutputs()?['body/RiskData'], true),
+  equals(triggerOutputs()?['body/RiskIT'], true),
   equals(triggerOutputs()?['body/RiskIP'], true),
+  equals(triggerOutputs()?['body/RiskPricing'], true),
   equals(triggerOutputs()?['body/RiskLiability'], true),
   equals(triggerOutputs()?['body/RiskLaw'], true),
-  equals(triggerOutputs()?['body/RiskConflict'], true)
+  equals(triggerOutputs()?['body/RiskConflict'], true),
+  equals(triggerOutputs()?['body/PurchaseType/Value'], 'Consultant or individual'),
+  equals(triggerOutputs()?['body/RiskCritical'], true)
 )
 ```
+
+Les huit premières conditions sont celles du prototype. Les deux dernières sont l'extension tirée des Annexes 3 et 5 (formule nfLegalAnnexExtension dans l'application). Si Legal les écarte, il faut les retirer aux deux endroits.
 
 7. Contrôles. Pour chacun, une Condition qui, si elle est vraie, ajoute un message au tableau Errors :
     - Écart de total : `or(greater(sub(outputs('ServerTotal'), float(coalesce(triggerOutputs()?['body/TotalExpectedCommitment'], 0))), 0.01), less(sub(outputs('ServerTotal'), float(coalesce(triggerOutputs()?['body/TotalExpectedCommitment'], 0))), -0.01))` → message « Total incohérent ».
     - Niveau : `not(equals(outputs('ServerLevel'), triggerOutputs()?['body/ProcurementLevel']))` → message « Niveau incohérent ».
     - Legal : `and(outputs('ServerLegal'), not(equals(triggerOutputs()?['body/LegalMandatory'], true)))` → message « Revue Legal requise mais non enregistrée ».
+    - Total nul : `lessOrEquals(outputs('ServerTotal'), 0)` → message « Aucun montant : niveau non déterminé ».
     - Champs obligatoires : `or(empty(triggerOutputs()?['body/Title']), empty(triggerOutputs()?['body/Department/Value']), empty(triggerOutputs()?['body/BusinessNeed']), empty(triggerOutputs()?['body/PurchaseType/Value']), empty(triggerOutputs()?['body/ProjectOwner/Email']), empty(triggerOutputs()?['body/BusinessOwner/Email']), empty(triggerOutputs()?['body/FundingSource/Value']), empty(triggerOutputs()?['body/ProcurementContext/Value']), empty(triggerOutputs()?['body/CurrencyTreatment/Value']), empty(triggerOutputs()?['body/FinanceReviewer/Email']), empty(triggerOutputs()?['body/BusinessApprover/Email']), and(outputs('ServerLegal'), empty(triggerOutputs()?['body/LegalReviewer/Email'])))` → message « Champs obligatoires manquants ».
+    - Change : `equals(triggerOutputs()?['body/CurrencyTreatment/Value'], 'Finance confirmation pending')` → message « Équivalent EUR non confirmé par Finance ».
     - Séparation des fonctions : `equals(toLower(triggerOutputs()?['body/BusinessApprover/Email']), toLower(triggerOutputs()?['body/ProjectOwner/Email']))` → message « Le Business Approver ne peut pas être le Project Owner ».
 8. Condition `greater(length(variables('Errors')), 0)` :
     - Si vrai (soumission refusée) : mettre à jour l'élément avec Status = Draft et AmendmentReason = `join(variables('Errors'), '; ')`. Créer un élément History SubmissionRefused. Envoyer un e-mail au Project Owner avec la liste des erreurs et le lien vers le dossier. Puis Terminer avec l'état Réussi.

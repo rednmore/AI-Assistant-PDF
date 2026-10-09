@@ -15,30 +15,36 @@ Total attendu : 10 000 + 2 000 + 3 000 + 12 000 + 1 500 + 500 + 1 000 = 30 000,0
 Bornes des seuils (AT-04). Chaque montant est saisi dans Main Price seul :
 
 ```
+0,00        → aucun niveau, soumission bloquée
 25 000,00   → niveau 1   Standard     Direct appointment
 25 000,01   → niveau 2   Controlled   Market assessment
 50 000,00   → niveau 2
-50 000,01   → niveau 3   Enhanced     Competitive RFP
+50 000,01   → niveau 3   Enhanced     Competitive request for proposals
 250 000,00  → niveau 3
-250 000,01  → niveau 4   Strategic    RFI puis competitive RFP
-44 999,99   → niveau 2, sans alerte de seuil
-45 000,00   → niveau 2, avec alerte de seuil (90 % de 50 000)
+250 000,01  → niveau 4   Strategic    Market information request followed by competitive RFP
+47 500,00   → niveau 2, sans alerte de seuil (95 % de 50 000 exactement)
+47 500,01   → niveau 2, avec alerte de seuil
+23 750,01   → niveau 1, avec alerte de seuil
+250 000,00  → niveau 3, avec alerte de seuil
 ```
 
 Validation des montants : -1 dans Options doit bloquer la soumission. 2,5 dans Recurring Years doit afficher l'erreur « années entières » et bloquer la soumission.
 
-Déclencheurs (AT-05), sur un dossier de niveau 1 :
+Déclencheurs (AT-05) : les résultats suivent le prototype, sauf les deux lignes marquées « extension », qui découlent des Annexes 3 et 5 (README).
 
 ```
-Aucun risque                          → Legal non requis · Risk Low · DD Low
-IT seul                               → Legal non requis · Risk Medium · DD Medium
-Personal Data seul                    → Legal obligatoire · Risk Medium · DD Medium
-Conflict seul                         → Legal obligatoire · Risk High · DD High
-IT + Pricing + Critical               → Legal non requis · Risk High · DD High
-Total 60 000, aucun risque            → Legal obligatoire (niveau 3) · Risk Low · DD Medium
+Niveau 1, aucun risque                 → Legal non requis · Risk Low · DD Low
+Niveau 1, IT seul                      → Legal obligatoire · Risk Medium · DD Medium
+Niveau 1, Open-ended pricing seul      → Legal obligatoire · Risk Low · DD Low
+Niveau 1, Personal Data seul           → Legal obligatoire · Risk Medium · DD Medium
+Niveau 1, Conflict seul                → Legal obligatoire · Risk High · DD High
+Niveau 1, Related party (étape 1)      → Legal obligatoire · Risk High · DD High
+Niveau 2 (45 000), aucun risque        → Legal non requis · Risk Low · DD Low
+Niveau 3 (60 000), aucun risque        → Legal obligatoire · Risk Medium · DD Medium
+Niveau 1, Critical seul                → Risk High · DD High · Legal obligatoire (extension Annex 5 ; prototype : non)
+Niveau 1, Consultant or individual     → Risk Low · Legal obligatoire (extension Annex 3 ; prototype : non)
+Currency « Finance confirmation pending » → soumission bloquée
 ```
-
-Ces résultats découlent des hypothèses du README. Si Legal valide d'autres règles, mettre ce tableau à jour avant la recette.
 
 ## Scénarios
 
