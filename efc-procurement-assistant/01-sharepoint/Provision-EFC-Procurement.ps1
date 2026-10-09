@@ -16,13 +16,30 @@
     Une inscription d'application Entra ID pour PnP (obligatoire depuis septembre 2024), passée en -ClientId.
     Droits de propriétaire sur le site.
 
+    Pour la partie permissions : être administrateur de la collection de sites. Le script rompt l'héritage
+    des listes sans copier les droits existants ; seul un administrateur de collection conserve l'accès
+    pendant l'opération.
+
 .EXEMPLE
     ./Provision-EFC-Procurement.ps1 -SiteUrl "https://efc.sharepoint.com/sites/LegalDepartment" -ClientId "00000000-0000-0000-0000-000000000000"
+
+    ./Provision-EFC-Procurement.ps1 -SiteUrl "..." -ClientId "..." `
+        -GroupUsers "<id>" -GroupLegal "<id>" -GroupFinance "<id>" -GroupApprovers "<id>" `
+        -GroupAdministrators "<id>" -GroupAuditors "<id>"
 #>
 param(
     [Parameter(Mandatory = $true)] [string] $SiteUrl,
     [Parameter(Mandatory = $true)] [string] $ClientId,
-    [string] $RecordsListTitle = "Procurement Records"
+    [string] $RecordsListTitle = "Procurement Records",
+
+    # Object ID des groupes de sécurité Entra (§5.1). Si les six sont fournis, le script applique
+    # les permissions de l'option B au niveau des listes et les inscrit dans Procurement Settings.
+    [string] $GroupUsers,
+    [string] $GroupLegal,
+    [string] $GroupFinance,
+    [string] $GroupApprovers,
+    [string] $GroupAdministrators,
+    [string] $GroupAuditors
 )
 
 $ErrorActionPreference = "Stop"
@@ -233,6 +250,7 @@ $settings = [ordered]@{
     "AdminEmail"               = @("", "Adresse (de préférence une boîte partagée) qui reçoit les erreurs de flux.")
     "AppUrl"                   = @("", "URL de lecture de l'application (https://apps.powerapps.com/play/e/.../a/...).")
     "DocumentsLibraryUrl"      = @("", "URL du site + chemin de la bibliothèque Procurement Documents.")
+    "RoleDefId.ContributeNoDelete" = @("", "Identifiant du niveau 'EFC Contribute without delete', renseigné par le script.")
 }
 foreach ($key in $settings.Keys) {
     Ensure-Item -List "Procurement Settings" -Title $key -Values @{ SettingValue = $settings[$key][0]; SettingDescription = $settings[$key][1] }
@@ -321,7 +339,7 @@ Ensure-LookupField -List "Procurement History" -Name "ProcurementRecord" -Target
 Ensure-Field -List "Procurement History" -Name "RecordID" -Type Text
 Ensure-Field -List "Procurement History" -Name "EventType" -Type Choice -Choices @(
     "Created", "Submitted", "SubmissionRefused", "ApprovalRequested", "Decision", "Returned", "Reopened",
-    "Approved", "Rejected", "PDFGenerated", "DocumentUploaded", "ContractSigned", "Closed", "Cancelled", "FlowError")
+    "Approved", "Rejected", "PDFGenerated", "DocumentUploaded", "ContractSigned", "Closed", "Cancelled", "PermissionsRepaired", "FlowError")
 Ensure-DateTimeField -List "Procurement History" -Name "EventDate"
 Ensure-PersonField -List "Procurement History" -Name "PerformedBy"
 Ensure-Field -List "Procurement History" -Name "PreviousStatus" -Type Text
@@ -347,4 +365,68 @@ Ensure-Field -List "Procurement Documents" -Name "DocStatus" -Type Choice -Choic
 Ensure-PersonField -List "Procurement Documents" -Name "DocOwner"
 foreach ($idx in @("RecordID", "DocumentType", "DocStatus")) { Ensure-Index -List "Procurement Documents" -Name $idx }
 
-Write-Host "`nTerminé. Étape suivante : renseigner les GroupId.*, AdminEmail et les DocumentUrl de Procurement Policy Links." -ForegroundColor Green
+# ---------------------------------------------------------------------------
+# 6. Permissions – option B (niveau liste). Les droits par élément sont posés par le flux FP.
+# ---------------------------------------------------------------------------
+
+function Set-Setting {
+    param([string] $Key, [string] $Value)
+    $item = Get-PnPListItem -List "Procurement Settings" -PageSize 500 | Where-Object { $_["Title"] -eq $Key }
+    if ($item) { Set-PnPListItem -List "Procurement Settings" -Identity $item.Id -Values @{ SettingValue = $Value } | Out-Null }
+}
+
+Write-Host "`n6. Permissions (option B)" -ForegroundColor Yellow
+
+# Noms de rôles indépendants de la langue du site (Lecture/Read, Collaboration/Contribute, Contrôle total/Full Control)
+$roleRead = (Get-PnPRoleDefinition | Where-Object { $_.RoleTypeKind -eq "Reader" }).Name
+$roleContribute = (Get-PnPRoleDefinition | Where-Object { $_.RoleTypeKind -eq "Contributor" }).Name
+$roleFull = (Get-PnPRoleDefinition | Where-Object { $_.RoleTypeKind -eq "Administrator" }).Name
+
+$cndName = "EFC Contribute without delete"
+if (-not (Get-PnPRoleDefinition -Identity $cndName -ErrorAction SilentlyContinue)) {
+    Add-PnPRoleDefinition -RoleName $cndName -Clone $roleContribute -Exclude DeleteListItems, DeleteVersions `
+        -Description "EFC Procurement : ajout, modification et lecture, sans suppression d'éléments ni de versions." | Out-Null
+    Write-Host "  niveau de permission créé : $cndName"
+}
+$cndId = (Get-PnPRoleDefinition -Identity $cndName).Id
+Set-Setting -Key "RoleDefId.ContributeNoDelete" -Value "$cndId"
+Write-Host "  RoleDefId.ContributeNoDelete = $cndId"
+
+$groups = @{ Users = $GroupUsers; Legal = $GroupLegal; Finance = $GroupFinance; Approvers = $GroupApprovers; Administrators = $GroupAdministrators; Auditors = $GroupAuditors }
+if ($groups.Values | Where-Object { [string]::IsNullOrWhiteSpace($_) }) {
+    Write-Warning "Identifiants de groupes incomplets : permissions de liste non appliquées. Relancer avec les six paramètres -Group*."
+}
+else {
+    foreach ($k in $groups.Keys) { Set-Setting -Key "GroupId.$k" -Value $groups[$k] }
+    $claim = @{}; foreach ($k in $groups.Keys) { $claim[$k] = "c:0t.c|tenant|$($groups[$k])" }
+    $owners = Get-PnPGroup -AssociatedOwnerGroup
+
+    # Liste => @( @(groupe, rôle), ... )
+    $matrix = [ordered]@{
+        $RecordsListTitle          = @(@("Users", $cndName), @("Administrators", $roleFull))
+        "Procurement Approvals"    = @(@("Administrators", $roleFull))
+        "Procurement Documents"    = @(@("Administrators", $roleFull))
+        "Procurement History"      = @(@("Legal", $roleRead), @("Finance", $roleRead), @("Auditors", $roleRead), @("Administrators", $roleFull))
+        "Procurement Config"       = @(@("Users", $roleRead), @("Legal", $roleRead), @("Finance", $roleRead), @("Approvers", $roleRead), @("Auditors", $roleRead), @("Administrators", $roleFull))
+        "Procurement Settings"     = @(@("Users", $roleRead), @("Legal", $roleRead), @("Finance", $roleRead), @("Approvers", $roleRead), @("Auditors", $roleRead), @("Administrators", $roleFull))
+        "Procurement Policy Links" = @(@("Users", $roleRead), @("Legal", $roleRead), @("Finance", $roleRead), @("Approvers", $roleRead), @("Auditors", $roleRead), @("Administrators", $roleFull))
+    }
+
+    foreach ($listTitle in $matrix.Keys) {
+        $list = Get-PnPList -Identity $listTitle -Includes HasUniqueRoleAssignments
+        if (-not $list.HasUniqueRoleAssignments) {
+            # Sans copie : les membres et visiteurs du site Legal Department n'ont plus accès à la liste.
+            # ClearSubscopes à false : les droits déjà posés par FP sur les éléments sont conservés en cas de relance.
+            Set-PnPList -Identity $listTitle -BreakRoleInheritance -CopyRoleAssignments:$false -ClearSubscopes:$false | Out-Null
+            Write-Host "  héritage rompu : $listTitle"
+        }
+        Set-PnPListPermission -Identity $listTitle -Group $owners -AddRole $roleFull | Out-Null
+        foreach ($grant in $matrix[$listTitle]) {
+            Set-PnPListPermission -Identity $listTitle -User $claim[$grant[0]] -AddRole $grant[1] | Out-Null
+            Write-Host "  $listTitle : $($grant[0]) -> $($grant[1])"
+        }
+    }
+    Write-Warning "Vérifier dans chaque liste (Paramètres > Autorisations) qu'aucun autre groupe ne subsiste, en particulier après une relance."
+}
+
+Write-Host "`nTerminé. Étape suivante : renseigner AdminEmail et AppUrl, puis remplacer les DocumentUrl de Procurement Policy Links par les liens directs publiés." -ForegroundColor Green

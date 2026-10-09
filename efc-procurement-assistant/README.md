@@ -4,19 +4,19 @@ Ce dossier traduit le cahier des charges « EFC Procurement Assistant, Draft 1.0
 
 ## Contenu
 
-1. `01-sharepoint/Provision-EFC-Procurement.ps1` : script PnP PowerShell qui crée les listes complémentaires, la bibliothèque documentaire, les listes de paramétrage, les colonnes techniques manquantes et les index. Il ne modifie aucune colonne existante de Procurement Records.
+1. `01-sharepoint/Provision-EFC-Procurement.ps1` : script PnP PowerShell qui crée les listes complémentaires, la bibliothèque documentaire, les listes de paramétrage, les colonnes techniques manquantes, les index et les permissions de l'option B au niveau des listes. Il ne modifie aucune colonne existante de Procurement Records.
 2. `02-power-apps/GUIDE-POWER-APPS.md` : construction de la Canvas App écran par écran, avec les noms de contrôles et toutes les formules Power Fx.
 3. `02-power-apps/App.Formulas.fx` : les formules nommées (calcul du total, route, risques, champs manquants) à coller dans la propriété Formulas de l'objet App.
-4. `03-power-automate/GUIDE-FLOWS.md` : les huit flux, action par action, avec les expressions et les conditions de déclenchement.
+4. `03-power-automate/GUIDE-FLOWS.md` : le flux enfant de permissions FP et les neuf flux, action par action, avec les expressions et les conditions de déclenchement.
 5. `04-pdf/procurement-record-template.html` : le gabarit HTML converti en PDF par le flux de génération.
-6. `05-tests/PLAN-DE-RECETTE.md` : les scénarios AT-01 à AT-14 rattachés aux composants qui les couvrent, avec les jeux de données de test.
+6. `05-tests/PLAN-DE-RECETTE.md` : les scénarios AT-01 à AT-14 du cahier et AT-15 à AT-20 propres à cette conception, rattachés aux composants qui les couvrent, avec les jeux de données de test.
 
 ## Ordre de construction
 
 1. Créer les groupes Entra ID listés au point 5.1 du cahier et noter leurs identifiants (Object ID).
-2. Exécuter le script SharePoint, puis renseigner les identifiants de groupes et l'adresse de l'administrateur dans la liste Procurement Settings.
+2. Exécuter le script SharePoint avec les six identifiants de groupes, en tant qu'administrateur de la collection de sites. Il crée les listes, pose les permissions de l'option B et renseigne Procurement Settings. Compléter ensuite AdminEmail et AppUrl.
 3. Créer une Solution Power Platform « EFC Procurement Assistant » et y créer toutes les ressources suivantes, afin de pouvoir les exporter vers test et production.
-4. Construire les flux F1, F5 et F7 en premier : la numérotation, le PDF et le téléversement sont indépendants et faciles à tester seuls.
+4. Créer le compte de service et lui donner les droits de propriétaire du site. Construire ensuite le flux enfant FP, puis F1, F1b, F5 et F7. FP doit être testé en premier, car tous les autres flux en dépendent : créer un élément de test et appeler FP à la main, puis vérifier les autorisations de l'élément dans SharePoint.
 5. Construire l'application en suivant le guide, puis les flux F0, F2, F3, F4 et F6.
 6. Dérouler le plan de recette avec un compte de chaque profil.
 
@@ -73,8 +73,14 @@ Les liens vers la Policy et les Annexes sont, dans le prototype, des recherches 
 
 Séquence d'approbation (point non couvert par le prototype, qui se limite à une checklist déclarative) : Finance, et Legal si requis, en parallèle, puis le Business Approver. La signature est confirmée séparément au passage en Contract Signed. Le prototype rappelle d'ailleurs que « award approval remains separate from signature authority ».
 
-## Décisions ouvertes qui bloquent la mise en production
+## Sécurité : option B retenue
 
-La première décision ouverte, la sécurité par dossier, conditionne le flux F1. L'option A donne à tous les membres d'EFC-Procurement-Users la lecture de tous les dossiers, et seule la modification est verrouillée après la soumission. L'option B donne à chaque dossier, dès sa création, des permissions propres : ses owners, Legal, Finance, Auditors et Administrators. Compte tenu des données de due diligence et de conflits d'intérêts (point 13), je recommande l'option B. Sa limite technique (environ 50 000 permissions uniques par liste, 5 000 recommandées) n'est pas un sujet à l'échelle des achats d'EFC. Le guide des flux décrit les deux options.
+Chaque dossier n'est visible que par les personnes qui y jouent un rôle : Project Owner, Business Owner, créateur, puis, à partir de la soumission, les reviewers désignés et la Signature Authority. S'y ajoutent Legal, Finance et Auditors, en lecture, et Administrators. Un employé EFC sans rôle sur un dossier ne le voit pas, ni dans l'application ni dans SharePoint. Les membres du site Legal Department n'y ont pas accès du seul fait de leur appartenance au site.
 
-Les autres décisions du point 16.2 n'empêchent pas de construire, car elles sont isolées dans Procurement Config, Procurement Settings ou le flux F2.
+La mise en œuvre tient en trois éléments. Le script rompt l'héritage des listes et pose les droits des groupes. Un flux enfant unique, FP, calcule les droits de chaque dossier, de son dossier documentaire et de chaque ligne d'approbation à partir de leur état, et il est le seul à toucher aux permissions. Enfin, un niveau de permission sans suppression garantit que personne, hors administrateurs, ne peut effacer un dossier, une décision ou une pièce.
+
+Conséquences à connaître. Legal et Finance lisent tous les dossiers : c'est l'« accès large Legal » du point 16.2. Le restreindre par département ne demande de modifier que FP. Un approbateur ne peut décider qu'à son tour, et sa décision est figée dès qu'elle est traitée. Un dossier transmis à un autre Project Owner reste lisible par son créateur. Les volumes d'EFC restent très loin de la limite SharePoint d'environ 50 000 objets à permissions uniques par liste (5 000 recommandés), à raison d'un dossier, un dossier documentaire et trois à six lignes d'approbation par procurement.
+
+## Décisions ouvertes
+
+Les décisions du point 16.2 qui restent ouvertes n'empêchent pas de construire. Elles sont isolées dans Procurement Config, Procurement Settings, la formule nfLegalAnnexExtension, le flux F2 ou le flux FP.

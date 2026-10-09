@@ -621,6 +621,10 @@ btnReopen  "Reopen"
     Visible  : varRec.Status.Value in ["Under Review", "Approved"] && (varIsLegal || varIsAdmin)
     OnSelect : Set(varAction, "Reopen"); Select(btnRunAction)
 
+btnRepair  "Recalculer les droits"
+    Visible  : varIsAdmin
+    OnSelect : Set(varAction, "RepairPermissions"); Select(btnRunAction)
+
 btnCancel  "Cancel"
     Visible  : (varRec.Status.Value in ["Draft", "Returned for Amendment"] && varCanEdit) ||
                (varIsAdmin && !(varRec.Status.Value in ["Closed", "Cancelled"]))
@@ -747,6 +751,8 @@ Set(varAfterSave, "")
 Le Patch combine les quatre formulaires et les valeurs calculées. Les valeurs calculées ne sont donc jamais saisies par l'utilisateur, et elles sont réécrites à chaque enregistrement (§8.3). RecordID, Status, les dates d'audit et LatestPDFUrl ne figurent dans aucun formulaire, et l'application ne les écrit qu'aux endroits prévus.
 
 ## 6. Points de vigilance
+
+Sécurité par dossier (option B) : l'application n'a rien à filtrer elle-même. SharePoint ne renvoie à chaque utilisateur que les dossiers, les documents et les approbations sur lesquels il a un droit. Les galeries My Drafts, My Open Records, Search et Approvals Pending sont donc restreintes automatiquement. Deux effets sont visibles pour l'utilisateur. Quelques secondes après New Procurement, le temps que F1 pose les droits, le dossier est déjà ouvert et utilisable. Si un owner remplace le Business Owner puis enregistre, l'ancien Business Owner perd l'accès au prochain rafraîchissement : s'il a le dossier ouvert, son enregistrement suivant échouera avec un message d'accès refusé, ce qui est le comportement voulu.
 
 Si les formules nommées refusent de référencer des contrôles (cela dépend de la version de Power Apps), déplacer nfTotal, nfLevel, nfRiskProfile, nfLegalMandatory, nfDueDiligenceTier et nfMissing dans un conteneur masqué de scrRecord. Chacune devient un libellé, et les autres formules lisent leur valeur, par exemple Value(lblTotalHidden.Text). La logique reste identique.
 
